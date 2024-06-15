@@ -55,11 +55,11 @@ export class Discolytics {
 	private dataApiUrl: string;
 	private apiUrl: string;
 	private auth: string;
-	private primary: boolean;
 	logLevels: Record<LOG_LEVEL, boolean>;
 	private pendingEvents: Event[];
 	private pendingInteractions: Interaction[];
 	private pendingCommands: Command[];
+	private clusterId?: number;
 
 	constructor(data: {
 		botId: string;
@@ -69,7 +69,7 @@ export class Discolytics {
 		dataApiUrl?: string;
 		apiUrl?: string;
 		auth: string;
-		primary?: boolean;
+		clusterId?: number;
 	}) {
 		this.botId = data.botId;
 		this.apiKey = data.apiKey;
@@ -78,7 +78,6 @@ export class Discolytics {
 		this.dataApiUrl = data.dataApiUrl ?? DATA_API_URL;
 		this.apiUrl = data.apiUrl ?? API_URL;
 		this.auth = parseAuth(data.auth);
-		this.primary = data.primary ?? true;
 		this.logLevels = {
 			debug: false,
 			error: true,
@@ -87,6 +86,7 @@ export class Discolytics {
 		this.pendingEvents = [];
 		this.pendingInteractions = [];
 		this.pendingCommands = [];
+		this.clusterId = data.clusterId;
 
 		setInterval(() => {
 			this.postEvents();
@@ -94,34 +94,21 @@ export class Discolytics {
 			this.postCommands();
 		}, 1000 * 15);
 
-		if (this.primary) {
+		if (!this.isCluster()) {
 			this.patchBot({}); // update client type
 			this.getBot();
-
-			setInterval(() => {
-				pidusage(process.pid, (err, stats) => {
-					if (err) return console.error(err);
-
-					this.postCpuUsage(stats.cpu);
-					this.postMemUsage(stats.memory);
-				});
-			}, 1000 * 10);
 
 			this.sendHeartbeat();
 			setInterval(() => {
 				this.sendHeartbeat();
 			}, 1000 * 30);
-
-			this.postGuildCount();
-			setInterval(
-				() => {
-					this.postGuildCount();
-				},
-				1000 * 60 * 30
-			);
 		}
 
 		this.log('info', 'Client ready');
+	}
+
+	private isCluster() {
+		return this.clusterId != null;
 	}
 
 	log(level: LOG_LEVEL, ...args: any[]) {
@@ -430,57 +417,6 @@ export class Discolytics {
 		const success = res.status >= 200 && res.status < 300;
 		if (!success)
 			this.log('error', 'Sent heartbeat returned status : ' + res.status);
-		return { success };
-	}
-
-	private async getApplication() {
-		const res = await fetch(`${DISCORD_API_URL}/applications/@me`, {
-			headers: {
-				Authorization: this.auth,
-			},
-		}).catch(() => null);
-
-		if (!res) {
-			this.log('error', 'Failed to get Discord application');
-			return;
-		}
-
-		const data = (await res.json()) as Application;
-
-		return data;
-	}
-
-	private async getGuildCount() {
-		const application = await this.getApplication();
-		return application?.approximate_guild_count;
-	}
-
-	private async postGuildCount() {
-		const count = await this.getGuildCount();
-		if (count == null) return { success: false };
-
-		const res = await fetch(
-			`${this.dataApiUrl}/bots/${this.botId}/guildCount`,
-			{
-				headers: {
-					Authorization: this.apiKey,
-					'Content-Type': 'application/json',
-				},
-				method: 'POST',
-				body: JSON.stringify({
-					count,
-				}),
-			}
-		).catch(() => null);
-
-		if (!res) {
-			this.log('error', 'Failed to post guild count : ' + count);
-			return { success: false };
-		}
-
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Post guild count returned status : ' + res.status);
 		return { success };
 	}
 }
