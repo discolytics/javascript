@@ -98,6 +98,7 @@ export class Discolytics {
 			this.patchBot({}); // update client type
 			this.getBot();
 
+			// if not a cluster (aka master process / bot without clusters), post heartbeats to monitor status
 			this.sendHeartbeat();
 			setInterval(() => {
 				this.sendHeartbeat();
