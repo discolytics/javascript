@@ -85,22 +85,27 @@ declare class Discolytics {
      * Adds an interaction to the queue. The queue is posted to Discolytics every 15 seconds.
      */
     postInteraction(type: number, guildId?: string): void;
-    postCpuUsage(value: number): Promise<{
-        success: boolean;
-    }>;
-    postMemUsage(value: number): Promise<{
-        success: boolean;
-    }>;
-    startCommand(name: string, userId: string): {
-        end: (metadata?: unknown) => void;
+    startCommand(data: {
+        name: string;
+        userId: string;
+        guildId?: string;
+    }): {
+        end: () => void;
     };
     postCommands(): Promise<{
         success: boolean;
     }>;
-    postCommand(name: string, userId: string, duration: number, metadata?: unknown): void;
+    postCommand(data: {
+        name: string;
+        userId: string;
+        duration: number;
+        guildId?: string;
+    }): void;
     private getBotUser;
     private getAvatarUrl;
-    private sendHeartbeat;
+    private getApplication;
+    private getGuildCount;
+    private postGuildCount;
 }
 
 export { API_URL, ClientType, DATA_API_URL, DISCORD_API_URL, Discolytics, type LOG_LEVEL, type ShardStatus };
