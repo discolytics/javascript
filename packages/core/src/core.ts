@@ -40,7 +40,7 @@ interface Command {
 	name: string;
 	userId: string;
 	duration: number;
-	metadata?: unknown;
+	guildId?: string;
 }
 
 const parseAuth = (s: string) => {
@@ -97,6 +97,14 @@ export class Discolytics {
 
 		this.patchBot({}); // update client type
 		this.getBot();
+
+		this.postGuildCount();
+		setInterval(
+			() => {
+				this.postGuildCount();
+			},
+			1000 * 60 * 15
+		);
 
 		this.log('info', 'Client ready');
 	}
@@ -326,63 +334,66 @@ export class Discolytics {
 		);
 	}
 
-	async postCpuUsage(value: number) {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/cpuUsage`, {
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: this.apiKey,
-			},
-			method: 'POST',
-			body: JSON.stringify({
-				value,
-				clientType: this.clientType,
-			}),
-		}).catch(() => null);
+	// async postCpuUsage(value: number) {
+	// 	const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/cpuUsage`, {
+	// 		headers: {
+	// 			'Content-Type': 'application/json',
+	// 			Authorization: this.apiKey,
+	// 		},
+	// 		method: 'POST',
+	// 		body: JSON.stringify({
+	// 			value,
+	// 			clientType: this.clientType,
+	// 		}),
+	// 	}).catch(() => null);
 
-		if (!res) {
-			// no response
-			this.log('error', 'Failed to post CPU usage : ' + value);
-			return { success: false };
-		}
+	// 	if (!res) {
+	// 		// no response
+	// 		this.log('error', 'Failed to post CPU usage : ' + value);
+	// 		return { success: false };
+	// 	}
 
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Post CPU usage returned status : ' + res.status);
-		return { success };
-	}
+	// 	const success = res.status >= 200 && res.status < 300;
+	// 	if (!success)
+	// 		this.log('error', 'Post CPU usage returned status : ' + res.status);
+	// 	return { success };
+	// }
 
-	async postMemUsage(value: number) {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/memUsage`, {
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: this.apiKey,
-			},
-			method: 'POST',
-			body: JSON.stringify({
-				value,
-				clientType: this.clientType,
-			}),
-		}).catch(() => null);
+	// async postMemUsage(value: number) {
+	// 	const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/memUsage`, {
+	// 		headers: {
+	// 			'Content-Type': 'application/json',
+	// 			Authorization: this.apiKey,
+	// 		},
+	// 		method: 'POST',
+	// 		body: JSON.stringify({
+	// 			value,
+	// 			clientType: this.clientType,
+	// 		}),
+	// 	}).catch(() => null);
 
-		if (!res) {
-			// no response
-			this.log('error', 'Failed to post memory usage : ' + value);
-			return { success: false };
-		}
+	// 	if (!res) {
+	// 		// no response
+	// 		this.log('error', 'Failed to post memory usage : ' + value);
+	// 		return { success: false };
+	// 	}
 
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Post memory usage returned status : ' + res.status);
-		return { success };
-	}
+	// 	const success = res.status >= 200 && res.status < 300;
+	// 	if (!success)
+	// 		this.log('error', 'Post memory usage returned status : ' + res.status);
+	// 	return { success };
+	// }
 
-	startCommand(name: string, userId: string) {
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
 		const start = Date.now();
 		return {
-			end: (metadata?: unknown) => {
+			end: () => {
 				const end = Date.now();
 				const duration = end - start;
-				return this.postCommand(name, userId, duration, metadata);
+				return this.postCommand({
+					...data,
+					duration,
+				});
 			},
 		};
 	}
@@ -418,14 +429,17 @@ export class Discolytics {
 		return { success };
 	}
 
-	postCommand(
-		name: string,
-		userId: string,
-		duration: number,
-		metadata?: unknown
-	) {
-		this.pendingCommands.push({ name, userId, duration, metadata });
-		this.log('debug', `Added command to queue : ${name} (User ID: ${userId})`);
+	postCommand(data: {
+		name: string;
+		userId: string;
+		duration: number;
+		guildId?: string;
+	}) {
+		this.pendingCommands.push(data);
+		this.log(
+			'debug',
+			`Added command to queue : ${data.name} (User ID: ${data.userId})`
+		);
 	}
 
 	private async getBotUser() {
@@ -457,22 +471,54 @@ export class Discolytics {
 		return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
 	}
 
-	private async sendHeartbeat() {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/heartbeat`, {
+	private async getApplication() {
+		const res = await fetch(`${DISCORD_API_URL}/applications/@me`, {
 			headers: {
-				Authorization: this.apiKey,
+				Authorization: this.auth,
 			},
-			method: 'POST',
 		}).catch(() => null);
 
 		if (!res) {
-			this.log('error', 'Failed to send heartbeat');
+			this.log('error', 'Failed to get Discord application');
+			return;
+		}
+
+		const data = (await res.json()) as Application;
+
+		return data;
+	}
+
+	private async getGuildCount() {
+		const application = await this.getApplication();
+		return application?.approximate_guild_count;
+	}
+
+	private async postGuildCount() {
+		const count = await this.getGuildCount();
+		if (count == null) return { success: false };
+
+		const res = await fetch(
+			`${this.dataApiUrl}/bots/${this.botId}/guildCount`,
+			{
+				headers: {
+					Authorization: this.apiKey,
+					'Content-Type': 'application/json',
+				},
+				method: 'POST',
+				body: JSON.stringify({
+					count,
+				}),
+			}
+		).catch(() => null);
+
+		if (!res) {
+			this.log('error', 'Failed to post guild count : ' + count);
 			return { success: false };
 		}
 
 		const success = res.status >= 200 && res.status < 300;
 		if (!success)
-			this.log('error', 'Sent heartbeat returned status : ' + res.status);
+			this.log('error', 'Post guild count returned status : ' + res.status);
 		return { success };
 	}
 }
