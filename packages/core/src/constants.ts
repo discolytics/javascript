@@ -11,4 +11,11 @@ export enum ClientType {
 	DISCORDJS_WS,
 }
 
-export type LOG_LEVEL = 'info' | 'error' | 'debug'
+export type LOG_LEVEL = 'info' | 'error' | 'debug';
+
+export type ShardStatus =
+	| 'ready'
+	| 'connecting'
+	| 'reconnecting'
+	| 'resuming'
+	| 'disconnected';

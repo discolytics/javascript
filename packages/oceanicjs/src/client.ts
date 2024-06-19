@@ -1,11 +1,26 @@
-import { Discolytics as CoreClient, ClientType } from '@discolytics/core';
-import type { Client as Bot } from 'oceanic.js';
+import {
+	Discolytics as CoreClient,
+	ClientType,
+	ShardStatus,
+} from '@discolytics/core';
+import type {
+	Client as Bot,
+	ShardStatus as OceanicShardStatus,
+} from 'oceanic.js';
 import fs from 'fs';
 import path from 'path';
 
 export class Discolytics {
 	core: CoreClient;
 	private bot: Bot;
+	private autoPostShards: boolean;
+
+	postShards: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
+	postCluster: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
 
 	constructor(data: {
 		botId: string;
@@ -13,6 +28,8 @@ export class Discolytics {
 		dataApiUrl?: string;
 		apiUrl?: string;
 		bot: Bot;
+		clusterId?: number;
+		autoPostShards?: boolean;
 	}) {
 		if (!data.bot.options.auth)
 			throw new Error('Auth not passed to OceanicJS client');
@@ -23,6 +40,17 @@ export class Discolytics {
 			clientVersion: this.getClientVersion(),
 		});
 		this.bot = data.bot;
+		this.autoPostShards = data.autoPostShards ?? true;
+
+		if (this.autoPostShards) {
+			setInterval(() => {
+				this.bot.shards.map((shard) => ({
+					id: shard.id,
+					status: this.mapShardStatus(shard.status),
+					latency: shard.latency,
+				}));
+			}, 1000 * 15);
+		}
 
 		this.bot.on('packet', async (data) => {
 			const d = data.d as any;
@@ -31,6 +59,22 @@ export class Discolytics {
 				this.core.postInteraction(d.type, d.guild_id);
 			}
 		});
+
+		this.postShards = this.core.postShards;
+		this.postCluster = this.core.postCluster;
+	}
+
+	private mapShardStatus(status: OceanicShardStatus): ShardStatus {
+		switch (status) {
+			case 'connecting':
+				return 'connecting';
+			case 'ready':
+				return 'ready';
+			case 'resuming':
+				return 'resuming';
+			default:
+				return 'disconnected';
+		}
 	}
 
 	startCommand(name: string, userId: string) {

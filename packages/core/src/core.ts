@@ -4,6 +4,7 @@ import {
 	ClientType,
 	DATA_API_URL,
 	DISCORD_API_URL,
+	ShardStatus,
 	type LOG_LEVEL,
 } from './constants';
 import type { Application, User } from './types/discord';
@@ -94,22 +95,76 @@ export class Discolytics {
 			this.postCommands();
 		}, 1000 * 15);
 
-		if (!this.isCluster()) {
-			this.patchBot({}); // update client type
-			this.getBot();
-
-			// if not a cluster (aka master process / bot without clusters), post heartbeats to monitor status
-			this.sendHeartbeat();
-			setInterval(() => {
-				this.sendHeartbeat();
-			}, 1000 * 30);
-		}
+		this.patchBot({}); // update client type
+		this.getBot();
 
 		this.log('info', 'Client ready');
 	}
 
 	private isCluster() {
 		return this.clusterId != null;
+	}
+
+	async postShards(
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) {
+		if (this.isCluster()) return this.postCluster(shards);
+		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/shards`, {
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: this.apiKey,
+			},
+			method: 'PUT',
+			body: JSON.stringify({
+				shards,
+			}),
+		}).catch(() => null);
+
+		if (!res) {
+			// no response
+			this.log('error', 'Failed to post shards');
+			return { success: false };
+		}
+
+		const success = res.status >= 200 && res.status < 300;
+		if (!success)
+			this.log('error', `Post shards returned status code : ${res.status}`);
+		else this.log('debug', `Posted shards (${shards.length})`);
+		return { success };
+	}
+
+	async postCluster(
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) {
+		const res = await fetch(
+			`${this.dataApiUrl}/bots/${this.botId}/clusters/${this.clusterId}`,
+			{
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: this.apiKey,
+				},
+				method: 'PUT',
+				body: JSON.stringify({
+					shards,
+				}),
+			}
+		).catch(() => null);
+
+		if (!res) {
+			// no response
+			this.log('error', 'Failed to post cluster');
+			return { success: false };
+		}
+
+		const success = res.status >= 200 && res.status < 300;
+		if (!success)
+			this.log('error', `Post cluster returned status code : ${res.status}`);
+		else
+			this.log(
+				'debug',
+				`Posted cluster ${this.clusterId} with ${shards.length} shards`
+			);
+		return { success };
 	}
 
 	log(level: LOG_LEVEL, ...args: any[]) {
