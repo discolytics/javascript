@@ -47,13 +47,6 @@ export class Discolytics {
 		this.postCluster = this.core.postCluster.bind(this.core);
 
 		if (this.autoPostShards) {
-			this.postShards(
-				this.bot.ws.shards.map((shard) => ({
-					id: shard.id,
-					status: this.mapShardStatus(shard.status),
-					latency: shard.ping,
-				}))
-			);
 			setInterval(() => {
 				this.postShards(
 					this.bot.ws.shards.map((shard) => ({

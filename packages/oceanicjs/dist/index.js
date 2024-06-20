@@ -90,13 +90,6 @@ var Discolytics = class {
     this.postShards = this.core.postShards.bind(this.core);
     this.postCluster = this.core.postCluster.bind(this.core);
     if (this.autoPostShards) {
-      this.postShards(
-        this.bot.shards.map((shard) => ({
-          id: shard.id,
-          status: this.mapShardStatus(shard.status),
-          latency: shard.latency
-        }))
-      );
       setInterval(() => {
         this.postShards(
           this.bot.shards.map((shard) => ({
