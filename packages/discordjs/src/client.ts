@@ -1,5 +1,9 @@
-import { Discolytics as CoreClient, ClientType } from '@discolytics/core';
-import type { Client as Bot } from 'discord.js';
+import {
+	Discolytics as CoreClient,
+	ClientType,
+	type ShardStatus,
+} from '@discolytics/core';
+import { Client as Bot, Status } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { parseToken } from './utils';
@@ -8,6 +12,14 @@ export class Discolytics {
 	core: CoreClient;
 	private bot: Bot;
 	private token: string;
+	private autoPostShards: boolean;
+
+	postShards: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
+	postCluster: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
 
 	constructor(data: {
 		botId: string;
@@ -16,6 +28,8 @@ export class Discolytics {
 		apiUrl?: string;
 		bot: Bot;
 		token?: string;
+		clusterId?: number;
+		autoPostShards?: boolean;
 	}) {
 		this.token = data.token ?? data.bot.token ?? '';
 		if (!this.token) throw new Error('Auth not passed to DiscordJS client');
@@ -27,6 +41,22 @@ export class Discolytics {
 			clientVersion: this.getClientVersion(),
 		});
 		this.bot = data.bot;
+		this.autoPostShards = data.autoPostShards ?? true;
+
+		this.postShards = this.core.postShards.bind(this.core);
+		this.postCluster = this.core.postCluster.bind(this.core);
+
+		if (this.autoPostShards) {
+			setInterval(() => {
+				this.postShards(
+					this.bot.ws.shards.map((shard) => ({
+						id: shard.id,
+						status: this.mapShardStatus(shard.status),
+						latency: shard.ping,
+					}))
+				);
+			}, 1000 * 15);
+		}
 
 		this.bot.on('raw', async (data) => {
 			const d = data.d as any;
@@ -37,8 +67,23 @@ export class Discolytics {
 		});
 	}
 
-	startCommand(name: string, userId: string) {
-		return this.core.startCommand(name, userId);
+	private mapShardStatus(status: Status): ShardStatus {
+		switch (status) {
+			case Status.Connecting:
+				return 'connecting';
+			case Status.Reconnecting:
+				return 'reconnecting';
+			case Status.Resuming:
+				return 'resuming';
+			case Status.Ready:
+				return 'ready';
+			default:
+				return 'disconnected';
+		}
+	}
+
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
+		return this.core.startCommand(data);
 	}
 
 	getClientVersion(): string | undefined {

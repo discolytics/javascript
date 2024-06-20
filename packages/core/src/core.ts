@@ -4,6 +4,7 @@ import {
 	ClientType,
 	DATA_API_URL,
 	DISCORD_API_URL,
+	ShardStatus,
 	type LOG_LEVEL,
 } from './constants';
 import type { Application, User } from './types/discord';
@@ -39,7 +40,7 @@ interface Command {
 	name: string;
 	userId: string;
 	duration: number;
-	metadata?: unknown;
+	guildId?: string;
 }
 
 const parseAuth = (s: string) => {
@@ -55,11 +56,11 @@ export class Discolytics {
 	private dataApiUrl: string;
 	private apiUrl: string;
 	private auth: string;
-	private primary: boolean;
 	logLevels: Record<LOG_LEVEL, boolean>;
 	private pendingEvents: Event[];
 	private pendingInteractions: Interaction[];
 	private pendingCommands: Command[];
+	private clusterId?: number;
 
 	constructor(data: {
 		botId: string;
@@ -69,7 +70,7 @@ export class Discolytics {
 		dataApiUrl?: string;
 		apiUrl?: string;
 		auth: string;
-		primary?: boolean;
+		clusterId?: number;
 	}) {
 		this.botId = data.botId;
 		this.apiKey = data.apiKey;
@@ -78,7 +79,6 @@ export class Discolytics {
 		this.dataApiUrl = data.dataApiUrl ?? DATA_API_URL;
 		this.apiUrl = data.apiUrl ?? API_URL;
 		this.auth = parseAuth(data.auth);
-		this.primary = data.primary ?? true;
 		this.logLevels = {
 			debug: false,
 			error: true,
@@ -87,41 +87,93 @@ export class Discolytics {
 		this.pendingEvents = [];
 		this.pendingInteractions = [];
 		this.pendingCommands = [];
+		this.clusterId = data.clusterId;
 
 		setInterval(() => {
 			this.postEvents();
 			this.postInteractions();
 			this.postCommands();
-		}, 1000 * 15);
+		}, 1000 * 10);
 
-		if (this.primary) {
-			this.patchBot({}); // update client type
-			this.getBot();
+		this.patchBot({}); // update client type
+		this.getBot();
 
-			setInterval(() => {
-				pidusage(process.pid, (err, stats) => {
-					if (err) return console.error(err);
-
-					this.postCpuUsage(stats.cpu);
-					this.postMemUsage(stats.memory);
-				});
-			}, 1000 * 10);
-
-			this.sendHeartbeat();
-			setInterval(() => {
-				this.sendHeartbeat();
-			}, 1000 * 30);
-
-			this.postGuildCount();
-			setInterval(
-				() => {
-					this.postGuildCount();
-				},
-				1000 * 60 * 30
-			);
-		}
+		this.postGuildCount();
+		setInterval(
+			() => {
+				this.postGuildCount();
+			},
+			1000 * 60 * 15
+		);
 
 		this.log('info', 'Client ready');
+	}
+
+	private isCluster() {
+		return this.clusterId != null;
+	}
+
+	async postShards(
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	): Promise<{ success: boolean }> {
+		if (this.isCluster()) return this.postCluster(shards);
+		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/shards`, {
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: this.apiKey,
+			},
+			method: 'PUT',
+			body: JSON.stringify({
+				shards,
+			}),
+		}).catch(() => null);
+
+		if (!res) {
+			// no response
+			this.log('error', 'Failed to post shards');
+			return { success: false };
+		}
+
+		const success = res.status >= 200 && res.status < 300;
+		if (!success)
+			this.log('error', `Post shards returned status code : ${res.status}`);
+		else this.log('debug', `Posted shards (${shards.length})`);
+		return { success };
+	}
+
+	async postCluster(
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	): Promise<{ success: boolean }> {
+		if (!this.isCluster()) return this.postShards(shards);
+		const res = await fetch(
+			`${this.dataApiUrl}/bots/${this.botId}/clusters/${this.clusterId}`,
+			{
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: this.apiKey,
+				},
+				method: 'PUT',
+				body: JSON.stringify({
+					shards,
+				}),
+			}
+		).catch(() => null);
+
+		if (!res) {
+			// no response
+			this.log('error', 'Failed to post cluster');
+			return { success: false };
+		}
+
+		const success = res.status >= 200 && res.status < 300;
+		if (!success)
+			this.log('error', `Post cluster returned status code : ${res.status}`);
+		else
+			this.log(
+				'debug',
+				`Posted cluster ${this.clusterId} with ${shards.length} shards`
+			);
+		return { success };
 	}
 
 	log(level: LOG_LEVEL, ...args: any[]) {
@@ -283,63 +335,66 @@ export class Discolytics {
 		);
 	}
 
-	async postCpuUsage(value: number) {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/cpuUsage`, {
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: this.apiKey,
-			},
-			method: 'POST',
-			body: JSON.stringify({
-				value,
-				clientType: this.clientType,
-			}),
-		}).catch(() => null);
+	// async postCpuUsage(value: number) {
+	// 	const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/cpuUsage`, {
+	// 		headers: {
+	// 			'Content-Type': 'application/json',
+	// 			Authorization: this.apiKey,
+	// 		},
+	// 		method: 'POST',
+	// 		body: JSON.stringify({
+	// 			value,
+	// 			clientType: this.clientType,
+	// 		}),
+	// 	}).catch(() => null);
 
-		if (!res) {
-			// no response
-			this.log('error', 'Failed to post CPU usage : ' + value);
-			return { success: false };
-		}
+	// 	if (!res) {
+	// 		// no response
+	// 		this.log('error', 'Failed to post CPU usage : ' + value);
+	// 		return { success: false };
+	// 	}
 
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Post CPU usage returned status : ' + res.status);
-		return { success };
-	}
+	// 	const success = res.status >= 200 && res.status < 300;
+	// 	if (!success)
+	// 		this.log('error', 'Post CPU usage returned status : ' + res.status);
+	// 	return { success };
+	// }
 
-	async postMemUsage(value: number) {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/memUsage`, {
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: this.apiKey,
-			},
-			method: 'POST',
-			body: JSON.stringify({
-				value,
-				clientType: this.clientType,
-			}),
-		}).catch(() => null);
+	// async postMemUsage(value: number) {
+	// 	const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/memUsage`, {
+	// 		headers: {
+	// 			'Content-Type': 'application/json',
+	// 			Authorization: this.apiKey,
+	// 		},
+	// 		method: 'POST',
+	// 		body: JSON.stringify({
+	// 			value,
+	// 			clientType: this.clientType,
+	// 		}),
+	// 	}).catch(() => null);
 
-		if (!res) {
-			// no response
-			this.log('error', 'Failed to post memory usage : ' + value);
-			return { success: false };
-		}
+	// 	if (!res) {
+	// 		// no response
+	// 		this.log('error', 'Failed to post memory usage : ' + value);
+	// 		return { success: false };
+	// 	}
 
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Post memory usage returned status : ' + res.status);
-		return { success };
-	}
+	// 	const success = res.status >= 200 && res.status < 300;
+	// 	if (!success)
+	// 		this.log('error', 'Post memory usage returned status : ' + res.status);
+	// 	return { success };
+	// }
 
-	startCommand(name: string, userId: string) {
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
 		const start = Date.now();
 		return {
-			end: (metadata?: unknown) => {
+			end: () => {
 				const end = Date.now();
 				const duration = end - start;
-				return this.postCommand(name, userId, duration, metadata);
+				return this.postCommand({
+					...data,
+					duration,
+				});
 			},
 		};
 	}
@@ -375,14 +430,17 @@ export class Discolytics {
 		return { success };
 	}
 
-	postCommand(
-		name: string,
-		userId: string,
-		duration: number,
-		metadata?: unknown
-	) {
-		this.pendingCommands.push({ name, userId, duration, metadata });
-		this.log('debug', `Added command to queue : ${name} (User ID: ${userId})`);
+	postCommand(data: {
+		name: string;
+		userId: string;
+		duration: number;
+		guildId?: string;
+	}) {
+		this.pendingCommands.push(data);
+		this.log(
+			'debug',
+			`Added command to queue : ${data.name} (User ID: ${data.userId})`
+		);
 	}
 
 	private async getBotUser() {
@@ -412,25 +470,6 @@ export class Discolytics {
 		}
 
 		return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
-	}
-
-	private async sendHeartbeat() {
-		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/heartbeat`, {
-			headers: {
-				Authorization: this.apiKey,
-			},
-			method: 'POST',
-		}).catch(() => null);
-
-		if (!res) {
-			this.log('error', 'Failed to send heartbeat');
-			return { success: false };
-		}
-
-		const success = res.status >= 200 && res.status < 300;
-		if (!success)
-			this.log('error', 'Sent heartbeat returned status : ' + res.status);
-		return { success };
 	}
 
 	private async getApplication() {

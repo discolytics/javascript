@@ -1,4 +1,8 @@
-import { Discolytics as CoreClient, ClientType } from '@discolytics/core';
+import {
+	Discolytics as CoreClient,
+	ClientType,
+	ShardStatus,
+} from '@discolytics/core';
 import { type WebSocketManager, WebSocketShardEvents } from '@discordjs/ws';
 import fs from 'fs';
 import path from 'path';
@@ -8,6 +12,13 @@ export class Discolytics {
 	core: CoreClient;
 	private manager: WebSocketManager;
 	private token: string;
+
+	postShards: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
+	postCluster: (
+		shards: { id: number; status: ShardStatus; latency: number }[]
+	) => void;
 
 	constructor(data: {
 		botId: string;
@@ -37,10 +48,13 @@ export class Discolytics {
 				this.core.postInteraction(d.type, d.guild_id);
 			}
 		});
+
+		this.postShards = this.core.postShards.bind(this.core);
+		this.postCluster = this.core.postCluster.bind(this.core);
 	}
 
-	startCommand(name: string, userId: string) {
-		return this.core.startCommand(name, userId);
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
+		return this.core.startCommand(data);
 	}
 
 	getClientVersion(): string | undefined {

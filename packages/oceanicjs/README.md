@@ -20,7 +20,7 @@ const { Discolytics } = require('@discolytics/oceanicjs');
 const client = new Client({ auth: `Bot ${process.env.TOKEN}` });
 
 const discolytics = new Discolytics({
-	botId: 'YOUR_BOT_ID',
+	botId: 'YOUR_BOT_ID', // your bot ID from the Discolytics dashboard, not your bot user
 	apiKey: process.env.DISCOLYTICS_KEY,
 	bot: client,
 	token: process.env.TOKEN,
@@ -29,8 +29,12 @@ const discolytics = new Discolytics({
 client.on('ready', () => {
 	console.log(`Logged in as ${client.user.tag}!`);
 
-	// start a new command with discolytics.startCommand(). Provide the command name and user ID.
-	const command = discolytics.startCommand('help', '123');
+	// start a new command with discolytics.startCommand()
+	const command = discolytics.startCommand({
+		name: 'help',
+		userId: '123',
+		guildId: '123', // optional
+	});
 
 	setTimeout(() => {
 		// run the .end() method on the command to end it, posts the command with the calculated duration

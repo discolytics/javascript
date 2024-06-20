@@ -20,17 +20,25 @@ const { Discolytics } = require('@discolytics/discordjs');
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const discolytics = new Discolytics({
-	botId: 'YOUR_BOT_ID',
+	botId: 'YOUR_BOT_ID', // your bot ID from the Discolytics dashboard, not your bot user
 	apiKey: process.env.DISCOLYTICS_KEY,
 	bot: client,
 	token: process.env.TOKEN,
 });
 
+// use discolytics.postShards() to send a heartbeat and send an array of shards. If you are clustering your bot, you can also use discolytics.postCluster() which accepts the same arguments.
+// valid shard statuses include: 'ready' | 'connecting' | 'reconnecting' | 'resuming' | 'disconnected'
+discolytics.postShards([{ id: 0, status: 'ready', latency: 20 }]);
+
 client.on('ready', () => {
 	console.log(`Logged in as ${client.user.tag}!`);
 
-	// start a new command with discolytics.startCommand(). Provide the command name and user ID.
-	const command = discolytics.startCommand('help', '123');
+	// start a new command with discolytics.startCommand()
+	const command = discolytics.startCommand({
+		name: 'help',
+		userId: '123',
+		guildId: '123', // optional
+	});
 
 	setTimeout(() => {
 		// run the .end() method on the command to end it, posts the command with the calculated duration
