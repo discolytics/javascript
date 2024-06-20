@@ -1,5 +1,16 @@
 # @discolytics/discordjs
 
+## 2.0.0
+
+### Major Changes
+
+- v2
+
+### Patch Changes
+
+- Updated dependencies
+  - @discolytics/core@2.0.0
+
 ## 1.0.2
 
 ### Patch Changes

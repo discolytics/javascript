@@ -127,6 +127,8 @@ var Discolytics = class {
   }
   postCluster(shards) {
     return __async(this, null, function* () {
+      if (!this.isCluster())
+        return this.postShards(shards);
       const res = yield fetch(
         `${this.dataApiUrl}/bots/${this.botId}/clusters/${this.clusterId}`,
         {
