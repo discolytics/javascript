@@ -42,13 +42,25 @@ export class Discolytics {
 		this.bot = data.bot;
 		this.autoPostShards = data.autoPostShards ?? true;
 
+		this.postShards = this.core.postShards.bind(this.core);
+		this.postCluster = this.core.postCluster.bind(this.core);
+
 		if (this.autoPostShards) {
-			setInterval(() => {
+			this.postShards(
 				this.bot.shards.map((shard) => ({
 					id: shard.id,
 					status: this.mapShardStatus(shard.status),
 					latency: shard.latency,
-				}));
+				}))
+			);
+			setInterval(() => {
+				this.postShards(
+					this.bot.shards.map((shard) => ({
+						id: shard.id,
+						status: this.mapShardStatus(shard.status),
+						latency: shard.latency,
+					}))
+				);
 			}, 1000 * 15);
 		}
 
@@ -59,9 +71,6 @@ export class Discolytics {
 				this.core.postInteraction(d.type, d.guild_id);
 			}
 		});
-
-		this.postShards = this.core.postShards;
-		this.postCluster = this.core.postCluster;
 	}
 
 	private mapShardStatus(status: OceanicShardStatus): ShardStatus {
@@ -77,8 +86,8 @@ export class Discolytics {
 		}
 	}
 
-	startCommand(name: string, userId: string) {
-		return this.core.startCommand(name, userId);
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
+		return this.core.startCommand(data);
 	}
 
 	getClientVersion(): string | undefined {

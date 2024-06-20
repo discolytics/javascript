@@ -93,7 +93,7 @@ export class Discolytics {
 			this.postEvents();
 			this.postInteractions();
 			this.postCommands();
-		}, 1000 * 15);
+		}, 1000 * 10);
 
 		this.patchBot({}); // update client type
 		this.getBot();

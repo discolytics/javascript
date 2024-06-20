@@ -84,7 +84,7 @@ var Discolytics = class {
       this.postEvents();
       this.postInteractions();
       this.postCommands();
-    }, 1e3 * 15);
+    }, 1e3 * 10);
     this.patchBot({});
     this.getBot();
     this.postGuildCount();

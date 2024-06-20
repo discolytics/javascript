@@ -89,8 +89,8 @@ export class Discolytics {
 		}
 	}
 
-	startCommand(name: string, userId: string) {
-		return this.core.startCommand(name, userId);
+	startCommand(data: { name: string; userId: string; guildId?: string }) {
+		return this.core.startCommand(data);
 	}
 
 	getClientVersion(): string | undefined {
