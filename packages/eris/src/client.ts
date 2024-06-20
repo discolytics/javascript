@@ -53,7 +53,7 @@ export class Discolytics {
 					this.bot.shards.map((shard) => ({
 						id: shard.id,
 						status: this.mapShardStatus(shard.status),
-						latency: shard.latency,
+						latency: shard.latency == Infinity ? -1 : shard.latency,
 					}))
 				);
 			}, 1000 * 15);
