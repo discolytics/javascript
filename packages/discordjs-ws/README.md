@@ -15,7 +15,7 @@ Initiate the client library in your codebase. When initiating the Discolytics cl
 ```js
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
-const { Discolytics } = require('@discolytics/discordjs');
+const { Discolytics } = require('@discolytics/discordjs-ws');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
