@@ -115,7 +115,7 @@ export class Discolytics {
 
 	async postShards(
 		shards: { id: number; status: ShardStatus; latency: number }[]
-	) {
+	): Promise<{ success: boolean }> {
 		if (this.isCluster()) return this.postCluster(shards);
 		const res = await fetch(`${this.dataApiUrl}/bots/${this.botId}/shards`, {
 			headers: {
@@ -143,7 +143,8 @@ export class Discolytics {
 
 	async postCluster(
 		shards: { id: number; status: ShardStatus; latency: number }[]
-	) {
+	): Promise<{ success: boolean }> {
+		if (!this.isCluster()) return this.postShards(shards);
 		const res = await fetch(
 			`${this.dataApiUrl}/bots/${this.botId}/clusters/${this.clusterId}`,
 			{
